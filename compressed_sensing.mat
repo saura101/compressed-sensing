@@ -1,0 +1,71 @@
+% Load the image
+img = imread(['cameraman.jpg']);
+
+% Convert the image to grayscale if it's in RGB format
+if size(img, 3) == 3
+    img = rgb2gray(img);
+end
+
+% Apply DCT to the image
+dct_img = dct2(double(img));
+
+% Set 70% of the DCT coefficients to zero
+n = numel(dct_img);
+nz = round(0.5 * n); % number of non-zero coefficients
+[~, idx] = sort(abs(dct_img(:)), 'descend');
+dct_img(idx(nz+1:end)) = 0;
+
+% Create the chaotic map
+chaotic_mat = zeros(size(dct_img));
+x0 = 0.2; y0 = 0.4; z0 = 0.6; a = 10;
+for i = 1:numel(chaotic_mat)
+    x = mod(sin(a*y0) + cos(a*z0), 1);
+    y = mod(sin(a*z0) + cos(a*x0), 1);
+    z = mod(sin(a*x0) + cos(a*y0), 1);
+    chaotic_mat(i) = x + y + z;
+    x0 = x; y0 = y; z0 = z;
+end
+
+
+% Encrypt the chaotic matrix using XOR encryption
+encryption_key = uint32(12345);
+chaotic_mat_uint32 = typecast(chaotic_mat(:), 'uint32');
+encrypted_mat_uint32 = bitxor(chaotic_mat_uint32, encryption_key);
+encrypted_mat = typecast(encrypted_mat_uint32, 'double');
+encrypted_mat = reshape(encrypted_mat, size(chaotic_mat));
+
+% Scramble the non-zero DCT coefficients using the encrypted chaotic matrix
+scrambled_dct = dct_img;
+scrambled_dct(scrambled_dct ~= 0) = scrambled_dct(scrambled_dct ~= 0) .* chaotic_mat(scrambled_dct ~= 0);
+ %figure;
+%subplot(1,1,1); imshow((scrambled_dct)); title('Encrypted Image')
+%subplot(2,2,1); imhist(img); title('Original Image')
+%subplot(2,2,2); imhist(uint8(scrambled_dct)); title('Histogram of Encrypted Image')
+
+% Decrypt the encrypted chaotic matrix using XOR decryption
+decrypted_mat_uint32 = bitxor(typecast(encrypted_mat(:), 'uint32'), encryption_key);
+decrypted_mat = typecast(decrypted_mat_uint32, 'double');
+decrypted_mat = reshape(decrypted_mat, size(chaotic_mat));
+
+% Unscramble the non-zero DCT coefficients using the decrypted chaotic matrix
+reconstructed_dct = scrambled_dct;
+reconstructed_dct(reconstructed_dct ~= 0) = reconstructed_dct(reconstructed_dct ~= 0) ./ decrypted_mat(reconstructed_dct ~= 0);
+
+% Reconstruct the image using IDCT
+compressed_img = uint8(idct2(reconstructed_dct));
+
+% Display the original and compressed images side by side
+figure;
+  subplot(2,2,1); imshow(img); title('Original Image');
+  subplot(2,2,3); imshow(compressed_img); title('Compressed Image');
+
+% mse = mean((double(img(:)) - double(compressed_img(:))).^2);
+% if mse ~= 0
+%     max_val = double(max(img(:)));
+%     psnr = 10 * log10((255*255) / mse);
+%     fprintf('PSNR: %.2f dB\n', psnr);
+% else
+%     fprintf('PSNR is undefined as the images are identical.\n');
+% end
+% Verify the reconstruction error
+reconstruction_error = norm(dct_img - reconstructed_dct .* decrypted_mat) / norm(dct_img)
